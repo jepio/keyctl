@@ -3,7 +3,6 @@ package keyctl
 import (
 	"math/rand"
 	"testing"
-	"time"
 )
 
 func helperRandBlock(sz int) []byte {
@@ -28,17 +27,13 @@ func helperCompareBlock(t *testing.T, name string, blk2 []byte, ring Keyring) {
 		err error
 	)
 	if ring == nil {
-		ring, err = UserSessionKeyring()
+		ring, err = SessionKeyring()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	key, err = ring.Search(name)
 	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err = key.ExpireAfter(5); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +58,7 @@ func helperCmp(t *testing.T, blk1 []byte, blk2 []byte) {
 }
 
 func TestRandomKey256(t *testing.T) {
-	ring, err := UserSessionKeyring()
+	ring, err := SessionKeyring()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +73,7 @@ func TestRandomKey256(t *testing.T) {
 }
 
 func TestRandomKey700(t *testing.T) {
-	ring, err := UserSessionKeyring()
+	ring, err := SessionKeyring()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,10 +86,4 @@ func TestRandomKey700(t *testing.T) {
 
 	t.Logf("added %d byte random value key as: %v (%v)\n", len(r700), id.Id(), r700)
 	helperCompareBlock(t, "rand700", r700, nil)
-	time.Sleep(time.Duration(5)*time.Second + time.Duration(250000))
-
-	if _, err = ring.Search("rand700"); err == nil {
-		t.Fatal("'rand700' key did not expire in five seconds")
-	}
-	t.Logf("key %v expired after five seconds", id.Id())
 }

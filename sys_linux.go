@@ -145,22 +145,6 @@ func add_key(keyType, keyDesc string, payload []byte, id int32) (int32, error) {
 	return int32(r1), nil
 }
 
-func getfsgid() (int32, error) {
-	var (
-		a1    int32
-		err   error
-		errno syscall.Errno
-		r1    uintptr
-	)
-
-	a1 = -1
-	if r1, _, errno = syscall.Syscall(syscall_setfsgid, uintptr(a1), 0, 0); errno != 0 {
-		err = errno
-		return int32(-1), err
-	}
-	return int32(r1), nil
-}
-
 func newKeyring(id keyId) (*keyring, error) {
 	r1, _, err := keyctl(keyctlGetKeyringId, uintptr(id), uintptr(1))
 	if err != nil {
@@ -171,15 +155,6 @@ func newKeyring(id keyId) (*keyring, error) {
 		r1 = int32(id)
 	}
 	return &keyring{id: keyId(r1)}, nil
-}
-
-func createKeyring(parent keyId, name string) (*keyring, error) {
-	id, err := add_key("keyring", name, nil, int32(parent))
-	if err != nil {
-		return nil, err
-	}
-
-	return &keyring{id: keyId(id)}, nil
 }
 
 func searchKeyring(id keyId, name, keyType string) (keyId, error) {
@@ -198,70 +173,6 @@ func searchKeyring(id keyId, name, keyType string) (keyId, error) {
 
 	r1, _, err = keyctl(keyctlSearch, uintptr(id), uintptr(unsafe.Pointer(b1)), uintptr(unsafe.Pointer(b2)))
 	return keyId(r1), err
-}
-
-func describeKeyId(id keyId) ([]byte, error) {
-	var (
-		r1             int32
-		b1             []byte
-		err            error
-		size, sizeRead int
-	)
-
-	b1 = make([]byte, 64)
-	size = len(b1)
-	sizeRead = size + 1
-	for sizeRead > size {
-		r1, _, err = keyctl(keyctlDescribe, uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size))
-		if err != nil {
-			return nil, err
-		}
-
-		if sizeRead = int(r1); sizeRead > size {
-			b1 = make([]byte, sizeRead)
-			size = sizeRead
-			sizeRead++
-		} else {
-			size = sizeRead
-		}
-	}
-
-	return b1[:size-1], nil
-}
-
-func listKeys(id keyId) ([]keyId, error) {
-	var (
-		r1             int32
-		b1             []byte
-		err            error
-		size, sizeRead int
-	)
-
-	bsz := int(unsafe.Sizeof(r1))
-	b1 = make([]byte, 16*bsz)
-	size = len(b1)
-	sizeRead = size + 1
-	for sizeRead > size {
-		r1, _, err = keyctl(keyctlRead, uintptr(id), uintptr(unsafe.Pointer(&b1[0])), uintptr(size))
-
-		if err != nil {
-			return nil, err
-		}
-
-		if sizeRead = int(r1); sizeRead > size {
-			b1 = make([]byte, sizeRead)
-			size = sizeRead
-			sizeRead++
-		} else {
-			size = sizeRead
-		}
-	}
-	keys := make([]keyId, size/bsz)
-	for i := range keys {
-		keys[i] = *((*keyId)(unsafe.Pointer(&b1[i*bsz])))
-	}
-
-	return keys, nil
 }
 
 func updateKey(id keyId, payload []byte) error {
