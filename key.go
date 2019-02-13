@@ -1,40 +1,25 @@
 package keyctl
 
 import (
-	"time"
 	"unsafe"
 )
 
-// Represents a single key linked to one or more kernel keyrings.
+// Key represents a single key linked to one or more kernel keyrings.
 type Key struct {
 	Name string
 
 	id, ring keyId
 	size     int
-	ttl      time.Duration
 }
 
 func (k *Key) private() {}
 
-// Returns the 32-bit kernel identifier for a specific key
+// Id returns the 32-bit kernel identifier for a specific key
 func (k *Key) Id() int32 {
 	return int32(k.id)
 }
 
-// To expire a key automatically after some period of time call this method.
-func (k *Key) ExpireAfter(nsecs uint) error {
-	k.ttl = time.Duration(nsecs) * time.Second
-
-	_, _, err := keyctl(keyctlSetTimeout, uintptr(k.id), uintptr(nsecs))
-	return err
-}
-
-// Return information about a key.
-func (k *Key) Info() (Info, error) {
-	return getInfo(k.id)
-}
-
-// Get the key's value as a byte slice
+// Get returns the key's value as a byte slice
 func (k *Key) Get() ([]byte, error) {
 	var (
 		b        []byte
@@ -70,9 +55,6 @@ func (k *Key) Get() ([]byte, error) {
 // Set the key's value from a bytes slice. Expiration, if active, is reset by calling this method.
 func (k *Key) Set(b []byte) error {
 	err := updateKey(k.id, b)
-	if err == nil && k.ttl > 0 {
-		err = k.ExpireAfter(uint(k.ttl.Seconds()))
-	}
 	return err
 }
 
