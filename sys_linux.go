@@ -86,6 +86,18 @@ func (cmd keyctlCommand) String() string {
 	panic("bad arg")
 }
 
+// keyctl is a general-purpose kyctl wrapper for calls that need on unsafe.Pointers.
+// Don't cast UnsafePointers and pass them in here. Use keyctlOnePtr and keyctlTwoPtr for cases with unsafe.Pointer args.
+// This is to avoid the risks of converting unsafe.Pointer to unitptr before the actual sys call (as would be
+// necessary if using only this routine). The risks are as follows (the first is the most likely to affect this code):
+// (a) pointer is to stack-allocated object, and runtime has to grow the stack (moving everything on it, and invalidating any unintptrs into it)
+// (b) pointer is to something with no remaining references, so it gets GC'd before use
+// (c) theoretical possibility of a moving GC (for heap objects) in the future. Unlikely, but is one reason why converting to unitptr "early" is not supported
+// References:
+//      https://golang.org/pkg/unsafe/#Pointer
+// 		https://stackoverflow.com/a/22209698
+//      https://grokbase.com/t/gg/golang-nuts/157f2q8g9x/go-nuts-possible-misuse-of-unsafe-pointer
+//		(out of date? but informative) https://grokbase.com/t/gg/golang-nuts/147qqaky1h/go-nuts-uintptr-to-go-object-unsafe-to-pass-to-any-function-including-syscalls-c-functions
 func keyctl(cmd keyctlCommand, args ...uintptr) (r1 int32, r2 int32, err error) {
 	a := make([]uintptr, 6)
 	l := len(args)
@@ -109,6 +121,39 @@ func keyctl(cmd keyctlCommand, args ...uintptr) (r1 int32, r2 int32, err error) 
 	r2 = int32(v2)
 	return
 }
+
+// see comments on keyctl
+func keyctlOnePtr(cmd keyctlCommand, id uintptr, ptr unsafe.Pointer, extra uintptr) (r1 int32, r2 int32, err error) {
+	if debugSyscalls {
+		log.Printf("%v: %v %v %v %v\n", syscall_keyctl, id, cmd, ptr, extra)
+	}
+	v1, v2, errno := syscall.Syscall6(syscall_keyctl, uintptr(cmd), id, uintptr(ptr), extra, 0, 0)
+	if errno != 0 {
+		err = errno
+		return
+	}
+
+	r1 = int32(v1)
+	r2 = int32(v2)
+	return
+}
+
+// see comments on keyctl
+func keyctlTwoPtr(cmd keyctlCommand, id uintptr, ptr1, ptr2 unsafe.Pointer) (r1 int32, r2 int32, err error) {
+	if debugSyscalls {
+		log.Printf("%v: %v %v %v %v\n", syscall_keyctl, id, cmd, ptr1, ptr2)
+	}
+	v1, v2, errno := syscall.Syscall6(syscall_keyctl, uintptr(cmd), id, uintptr(ptr1), uintptr(ptr2), 0, 0)
+	if errno != 0 {
+		err = errno
+		return
+	}
+
+	r1 = int32(v1)
+	r2 = int32(v2)
+	return
+}
+
 
 func add_key(keyType, keyDesc string, payload []byte, id int32) (int32, error) {
 	var (
@@ -171,7 +216,7 @@ func searchKeyring(id keyId, name, keyType string) (keyId, error) {
 		return 0, err
 	}
 
-	r1, _, err = keyctl(keyctlSearch, uintptr(id), uintptr(unsafe.Pointer(b1)), uintptr(unsafe.Pointer(b2)))
+	r1, _, err = keyctlTwoPtr(keyctlSearch, uintptr(id), unsafe.Pointer(b1), unsafe.Pointer(b2))
 	return keyId(r1), err
 }
 
@@ -180,6 +225,6 @@ func updateKey(id keyId, payload []byte) error {
 	if size == 0 {
 		payload = make([]byte, 1)
 	}
-	_, _, err := keyctl(keyctlUpdate, uintptr(id), uintptr(unsafe.Pointer(&payload[0])), uintptr(size))
+	_, _, err := keyctlOnePtr(keyctlUpdate, uintptr(id), unsafe.Pointer(&payload[0]), uintptr(size))
 	return err
 }

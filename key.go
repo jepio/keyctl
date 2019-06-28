@@ -36,7 +36,7 @@ func (k *Key) Get() ([]byte, error) {
 	b = make([]byte, int(size))
 	sizeRead = size + 1
 	for sizeRead > size {
-		r1, _, err := keyctl(keyctlRead, uintptr(k.id), uintptr(unsafe.Pointer(&b[0])), uintptr(size))
+		r1, _, err := keyctlOnePtr(keyctlRead, uintptr(k.id), unsafe.Pointer(&b[0]), uintptr(size))
 		if err != nil {
 			return nil, err
 		}
